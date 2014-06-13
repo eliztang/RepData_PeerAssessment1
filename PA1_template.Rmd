@@ -2,19 +2,118 @@
 
 
 ## Loading and preprocessing the data
-
-
+```{r get_dataset, echo = TRUE}
+dataset = read.csv("activity.csv")
+dataset$date = strptime(dataset$date, "%Y-%m-%d")
+head(dataset)
+```
 
 ## What is mean total number of steps taken per day?
+clean.dataset: ignore missing values
+```{r}
+clean.dataset = na.omit(dataset) 
+head(clean.dataset)
+```
 
+Histogram of the total number of steps taken each day
+```{r}
+library(plyr)
+steps.date = ddply(clean.dataset, ~date, summarize, sum=sum(steps))
+colnames(steps.date) = c("date", "steps")
+hist(steps.date$steps)
+```
 
+The **mean** and **median** total number of steps taken per day
+```{r}
+steps.date.mean = ddply(clean.dataset, ~date, summarize, 
+                        mean = mean(steps),
+                        median = median(steps))
+steps.date.mean
+```
 
 ## What is the average daily activity pattern?
+A time series plot of the 5-minute interval (x-axis) and 
+the average number of steps taken, averaged across all days (y-axis)
+```{r}
+steps.interval.mean = ddply(clean.dataset, ~interval, summarize, 
+                        mean = mean(steps))
+library(ggplot2)
+g = ggplot(steps.interval.mean, aes(interval, mean))
+g + geom_line()
+```
 
-
+The 5-minute interval, on average across all the days 
+in the dataset, that contains the maximum number of steps:
+```{r}
+steps.interval.mean[steps.interval.mean$mean ==
+                      max(steps.interval.mean$mean), "interval"]
+```
 
 ## Imputing missing values
+The total number of rows with missing values in the dataset:
+```{r}
+nrow(dataset[is.na(dataset), ])
+```
 
+Going to impute each NA steps with mean of that 5-min interval across the rest of  dataset.
+
+impute.dataset: new dataset that is equal to the original dataset 
+but with the missing data filled in.
+```{r}
+impute.dataset = merge(dataset, steps.interval.mean, by="interval")
+for (i in 1:nrow(impute.dataset)) {
+  if(is.na(impute.dataset[i,"steps"])) {
+    impute.dataset[i,"steps"] = impute.dataset[i,"mean"]
+  }
+}
+impute.dataset$mean=NULL
+head(impute.dataset)
+```
+
+Compare with dataset where missing values were ignored.
+impute.dataset, Histogram of the total number of steps taken each day
+```{r}
+steps.date1 = ddply(impute.dataset, ~date, summarize, sum=sum(steps))
+colnames(steps.date1) = c("date", "steps")
+hist(steps.date1$steps)
+```
+
+impute.dataset, The **mean** and **median** total number of steps taken per day
+```{r}
+steps.date.mean1 = ddply(impute.dataset, ~date, summarize, 
+                        mean = mean(steps),
+                        median = median(steps))
+steps.date.mean1
+```
+
+Comparison of mean and median of both datasets
+```{r}
+merge(steps.date.mean, steps.date.mean1, by="date", all.y=TRUE)
+```
+All days have mean and median now.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+day.type: New factor variable "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+```{r}
+impute.dataset$weekdays = weekdays(impute.dataset$date)
+impute.dataset$day.type = "weekday"
+impute.dataset[impute.dataset$weekdays == "Saturday" | 
+                 impute.dataset$weekdays == "Sunday",
+               "day.type"] = "weekend"
+impute.dataset$day.type = as.factor(impute.dataset$day.type)
+head(impute.dataset)
+impute.dataset = impute.dataset[order(impute.dataset$date, impute.dataset$interval),]
+head(impute.dataset)
+```
+
+Plot of weekdays and weekends
+```{r}
+steps.interval.mean1 = ddply(impute.dataset, .(interval,day.type), summarize, 
+                            mean = mean(steps))
+
+g = ggplot(steps.interval.mean1, aes(interval, mean))
+g + geom_line() + facet_wrap(~ day.type, nrow = 2, ncol = 1) 
+```
+Yes, there is difference in activity between weekdays and weekends. the max of weekday is higher but it seems the weekend is more active overall.
